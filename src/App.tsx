@@ -1836,7 +1836,7 @@ function DiffBadge({ level }: { level: Difficulty }) {
 function CuisineBar({ selected, onChange }: { selected: Cuisine; onChange: (c: Cuisine) => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   return (
-    <div ref={scrollRef} style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6, flexWrap: "wrap" }}>
+    <div ref={scrollRef} className="cuisine-bar" style={{ flexWrap: "nowrap" }}>
       {CUISINES.map(({ label, emoji }) => {
         const active = selected === label;
         return (
@@ -1943,9 +1943,9 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
   const cuisineEntry = CUISINES.find(c => c.label === recipe.cuisine);
 
   return (
-    <div onClick={onClose}
+    <div onClick={onClose} className="modal-wrap"
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.58)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)", transition: "opacity 0.2s" }}>
-      <div onClick={e => e.stopPropagation()}
+      <div onClick={e => e.stopPropagation()} className="modal-box"
         style={{ background: "#fff", borderRadius: 18, maxWidth: 700, width: "100%", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 24px 80px rgba(0,0,0,0.28)" }}>
         {/* Hero image */}
         <div style={{ position: "relative", aspectRatio: "16/7", overflow: "hidden", borderRadius: "18px 18px 0 0", flexShrink: 0 }}>
@@ -1967,7 +1967,7 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
         </div>
 
         {/* Content */}
-        <div style={{ padding: "22px 28px 36px" }}>
+        <div className="modal-body" style={{ padding: "22px 28px 36px" }}>
           {/* Stats */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
             {[{ icon: "schedule", text: `${recipe.readyInMinutes} min` }, { icon: "groups", text: `${recipe.servings} servings` }, { icon: "menu_book", text: `${recipe.steps.length} steps` }].map(({ icon, text }) => (
@@ -1991,7 +1991,7 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
             <h3 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", margin: "0 0 13px", display: "flex", alignItems: "center", gap: 7 }}>
               <Icon n="nutrition" size={18} color="#33c738" /> Ingredients
             </h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+            <div className="modal-ing-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
               {recipe.ingredients.map(i => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", borderRadius: 9, background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
                   <Icon n="check_circle" size={15} color="#22c55e" />
@@ -2288,7 +2288,7 @@ function Footer() {
   return (
     <footer style={{ background: "#0f172a", color: "#94a3b8", padding: "48px 40px 0" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 40, marginBottom: 44 }}>
+        <div className="footer-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 40, marginBottom: 44 }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#fff", marginBottom: 14 }}>
               <Icon n="restaurant" size={22} color="#33c738" />
@@ -2388,7 +2388,7 @@ function NavBar({ view, setView, user, onSignOut }: { view: ViewName; setView: (
       position: "sticky", top: 0, zIndex: 200,
       background: "rgba(255,255,255,0.80)", backdropFilter: "blur(16px)",
       borderBottom: "1px solid rgba(226,232,240,0.8)",
-      padding: "12px 16px",
+      padding: "10px 14px",
     }}>
       <div style={{ maxWidth: 1280, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
         {/* Left: Logo + Nav links */}
@@ -2398,7 +2398,7 @@ function NavBar({ view, setView, user, onSignOut }: { view: ViewName; setView: (
             <span style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", letterSpacing: -0.3 }}>What's for Dinner?</span>
           </button>
           {/* Desktop nav links */}
-          <nav style={{ display: "flex", gap: 24, alignItems: "center" }}>
+          <nav className="nb-links" style={{ display: "flex", gap: 24, alignItems: "center" }}>
             {navLinks.map(({ label, v }) => (
               <button key={label} onClick={() => setView(v)}
                 style={{
@@ -2427,7 +2427,7 @@ function NavBar({ view, setView, user, onSignOut }: { view: ViewName; setView: (
                 <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#33c738", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#fff" }}>{(user.user_metadata?.full_name?.[0] || user.email?.[0] || "U").toUpperCase()}</span>
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#374151", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span className="nb-name" style={{ fontSize: 13, fontWeight: 600, color: "#374151", maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user.user_metadata?.full_name || user.email?.split("@")[0]}
                 </span>
                 <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#94a3b8" }}>{showUserMenu ? "keyboard_arrow_up" : "keyboard_arrow_down"}</span>
@@ -2476,14 +2476,14 @@ function HomePage({ onSearch }: { onSearch: (ings: string[]) => void }) {
       </div>
 
       {/* Content */}
-      <div style={{ position: "relative", zIndex: 2, maxWidth: 760, width: "100%", padding: "60px 24px", textAlign: "center" }}>
+      <div style={{ position: "relative", zIndex: 2, maxWidth: 760, width: "100%", padding: "clamp(32px, 8vw, 60px) 18px", textAlign: "center" }}>
         <span style={{ display: "inline-block", padding: "5px 16px", borderRadius: 99, background: "rgba(51,199,56,0.2)", color: "#4ade80", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 20 }}>
           Your personal chef awaits
         </span>
         <h1 style={{ color: "#fff", fontWeight: 900, fontSize: "clamp(2.2rem, 6vw, 4.2rem)", lineHeight: 1.1, letterSpacing: -1.2, margin: "0 0 14px" }}>
           Turn your fridge into{" "}<span style={{ color: "#4ade80", fontStyle: "italic" }}>a feast.</span>
         </h1>
-        <p style={{ color: "rgba(255,255,255,0.88)", fontSize: 17, maxWidth: 500, margin: "0 auto 38px", lineHeight: 1.65, fontWeight: 400 }}>
+        <p style={{ color: "rgba(255,255,255,0.88)", fontSize: "clamp(13px, 3vw, 17px)", maxWidth: 500, margin: "0 auto 28px", lineHeight: 1.65, fontWeight: 400 }}>
           Enter the ingredients you have on hand and we'll find the perfect recipe to cook tonight.
         </p>
 
@@ -2491,12 +2491,12 @@ function HomePage({ onSearch }: { onSearch: (ings: string[]) => void }) {
         <div style={{ maxWidth: 680, margin: "0 auto" }}>
           <div style={{ position: "relative" }}>
             <div style={{ position: "absolute", inset: 0, background: "rgba(51,199,56,0.22)", filter: "blur(20px)", borderRadius: 16, pointerEvents: "none" }} />
-            <div style={{ position: "relative", display: "flex", alignItems: "flex-start", background: "#fff", borderRadius: 16, padding: "6px 6px 6px 14px", boxShadow: "0 20px 60px rgba(0,0,0,0.26)" }}>
+            <div className="home-search" style={{ position: "relative", display: "flex", alignItems: "flex-start", background: "#fff", borderRadius: 16, padding: "6px 6px 6px 14px", boxShadow: "0 20px 60px rgba(0,0,0,0.26)" }}>
               <div style={{ paddingTop: 11, color: "#94a3b8", flexShrink: 0 }}>
                 <Icon n="flatware" size={20} />
               </div>
               <IngInput chips={chips} onAdd={v => setChips(p => [...p, v])} onRemove={v => setChips(p => p.filter(i => i !== v))} onSearch={doSearch} placeholder="chicken, spinach, garlic, onion..." />
-              <button onClick={doSearch} disabled={chips.length === 0}
+              <button onClick={doSearch} disabled={chips.length === 0} className="home-find-btn"
                 style={{ background: chips.length === 0 ? "#86efac" : "#33c738", color: "#fff", border: "none", borderRadius: 12, cursor: chips.length === 0 ? "not-allowed" : "pointer", padding: "12px 22px", fontWeight: 700, fontSize: 14, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 7, flexShrink: 0, alignSelf: "flex-start", marginTop: 1, transition: "background 0.2s" }}>
                 Find Recipes <Icon n="search" size={18} />
               </button>
@@ -2557,15 +2557,15 @@ function RecipesPage({ onViewRecipe, cuisine, onCuisineChange }: { onViewRecipe:
   const visibleRecipes = displayed.slice(0, visibleCount);
 
   return (
-    <div style={{ padding: "32px 32px 40px" }}>
+    <div className="glass-page" style={{ padding: "32px 32px 40px" }}>
 
           {/* Header + search */}
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16, marginBottom: 20 }}>
+          <div className="recipes-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16, marginBottom: 20 }}>
             <div>
               <h1 style={{ fontSize: 26, fontWeight: 900, color: "#0f172a", margin: "0 0 4px" }}>Browse Recipes</h1>
               <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>{displayed.length} recipes · click any to see the full cooking guide</p>
             </div>
-            <div ref={searchRef} style={{ position: "relative", width: 300 }}>
+            <div ref={searchRef} className="recipes-searchbar" style={{ position: "relative", width: 300 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "rgba(255,255,255,0.8)", borderRadius: 13, border: `1.5px solid ${showSugg && query ? "#33c738" : "rgba(51,199,56,0.2)"}`, transition: "border-color 0.18s", backdropFilter: "blur(8px)" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#94a3b8" }}>search</span>
                 <input value={query} onChange={e => { setQuery(e.target.value); setShowSugg(true); }} onFocus={() => setShowSugg(true)}
@@ -2610,7 +2610,7 @@ function RecipesPage({ onViewRecipe, cuisine, onCuisineChange }: { onViewRecipe:
               </div>
             ) : (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
+                <div className="recipe-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
                   {visibleRecipes.map((r, i) => <RecipeCard key={r.id} recipe={r} onClick={() => onViewRecipe(r)} delay={i * 30} />)}
                 </div>
                 {visibleCount < displayed.length && (
@@ -2701,7 +2701,7 @@ function ResultsPage({ chips, onAddChip, onRemoveChip, onViewRecipe, cuisine, on
   const visibleRecipes = recipes.slice(0, visibleCount);
 
   return (
-    <div style={{ padding: "32px 32px 40px" }}>
+    <div className="glass-page" style={{ padding: "32px 32px 40px" }}>
 
           {/* Header row */}
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
@@ -2712,7 +2712,7 @@ function ResultsPage({ chips, onAddChip, onRemoveChip, onViewRecipe, cuisine, on
           </div>
 
           {/* Ingredient chips row */}
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 20 }}>
+          <div className="chips-row" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 20 }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4, whiteSpace: "nowrap" }}>Your Ingredients:</span>
             {chips.map(c => (
               <div key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "#33c738", color: "#fff", borderRadius: 99, fontSize: 13, fontWeight: 600 }}>
@@ -2748,7 +2748,7 @@ function ResultsPage({ chips, onAddChip, onRemoveChip, onViewRecipe, cuisine, on
           {/* Recipe grid */}
           <div style={{ marginTop: 24 }}>
             {loading ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
+              <div className="recipe-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div key={i} style={{ background: "rgba(255,255,255,0.8)", borderRadius: 16, overflow: "hidden", border: "1.5px solid rgba(51,199,56,0.15)" }}>
                     <div style={{ aspectRatio: "4/3", background: "linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.4s infinite" }} />
@@ -2768,7 +2768,7 @@ function ResultsPage({ chips, onAddChip, onRemoveChip, onViewRecipe, cuisine, on
               </div>
             ) : (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
+                <div className="recipe-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
                   {visibleRecipes.map((r, i) => <RecipeCard key={r.id} recipe={r} onClick={() => onViewRecipe(r)} delay={i * 30} />)}
                 </div>
                 {visibleCount < recipes.length && (
@@ -2837,6 +2837,34 @@ export default function App() {
     .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; user-select: none; }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes float1 { 0%,100%{transform:translate(0,0) rotate(0deg);}33%{transform:translate(10px,-20px) rotate(5deg);}66%{transform:translate(-15px,15px) rotate(-5deg);} }
+    @keyframes float2 { 0%,100%{transform:translate(0,0) rotate(0deg);}50%{transform:translate(-20px,-30px) rotate(-10deg);} }
+    @keyframes gradShift { 0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;} }
+    .float1{animation:float1 20s ease-in-out infinite;} .float2{animation:float2 25s ease-in-out infinite;}
+    .float2d{animation:float2 25s ease-in-out infinite;animation-delay:-5s;} .float1d{animation:float1 20s ease-in-out infinite;animation-delay:-2s;}
+    .bg-anim{background:linear-gradient(-45deg,#f6f8f6,#e7f5e7,#f0fdf4,#f6f8f6);background-size:400% 400%;animation:gradShift 15s ease infinite;}
+    .cuisine-bar{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+    .cuisine-bar::-webkit-scrollbar{display:none;}
+    @media(max-width:640px){
+      .nb-links{display:none!important;}
+      .nb-name{display:none!important;}
+      .glass-page{padding:16px 14px 28px!important;}
+      .recipe-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px!important;}
+      .page-glass{margin:12px 0!important;border-radius:18px!important;}
+      .recipes-header{flex-direction:column!important;gap:10px!important;}
+      .recipes-searchbar{width:100%!important;}
+      .modal-wrap{padding:0!important;}
+      .modal-box{border-radius:14px!important;max-height:96vh!important;}
+      .modal-body{padding:14px 14px 28px!important;}
+      .modal-ing-grid{grid-template-columns:1fr!important;}
+      .home-search{flex-direction:column!important;padding:10px!important;gap:8px!important;}
+      .home-find-btn{width:100%!important;justify-content:center!important;margin-top:0!important;border-radius:10px!important;padding:13px!important;}
+      .footer-grid{grid-template-columns:1fr 1fr!important;gap:20px!important;}
+      .chips-row{gap:5px!important;}
+    }
+    @media(max-width:380px){
+      .recipe-grid{grid-template-columns:1fr!important;}
+    }
   `;
 
   // ── 1. Still checking session → subtle full-screen loader ──────────────
@@ -2892,8 +2920,8 @@ export default function App() {
 
         <PageTransition visible={view === "recipes"}>
           {/* Glass main wrapper matches HTML design */}
-          <div style={{ width: "100%", maxWidth: 1280, margin: "0 auto", padding: "0 16px 0" }}>
-            <div style={{ background: "rgba(255,255,255,0.60)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 28, border: "1px solid rgba(255,255,255,0.20)", boxShadow: "0 20px 60px rgba(0,0,0,0.10)", margin: "32px 0", overflow: "hidden" }}>
+          <div style={{ width: "100%", maxWidth: 1280, margin: "0 auto", padding: "0 12px" }}>
+            <div className="page-glass" style={{ background: "rgba(255,255,255,0.60)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 28, border: "1px solid rgba(255,255,255,0.20)", boxShadow: "0 20px 60px rgba(0,0,0,0.10)", margin: "32px 0", overflow: "hidden" }}>
               <RecipesPage onViewRecipe={r => setActiveRecipe(r)} cuisine={browseCuisine} onCuisineChange={setBrowseCuisine} />
             </div>
           </div>
@@ -2901,8 +2929,8 @@ export default function App() {
         </PageTransition>
 
         <PageTransition visible={view === "results"}>
-          <div style={{ width: "100%", maxWidth: 1280, margin: "0 auto", padding: "0 16px 0" }}>
-            <div style={{ background: "rgba(255,255,255,0.60)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 28, border: "1px solid rgba(255,255,255,0.20)", boxShadow: "0 20px 60px rgba(0,0,0,0.10)", margin: "32px 0", overflow: "hidden" }}>
+          <div style={{ width: "100%", maxWidth: 1280, margin: "0 auto", padding: "0 12px" }}>
+            <div className="page-glass" style={{ background: "rgba(255,255,255,0.60)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderRadius: 28, border: "1px solid rgba(255,255,255,0.20)", boxShadow: "0 20px 60px rgba(0,0,0,0.10)", margin: "32px 0", overflow: "hidden" }}>
               <ResultsPage chips={chips} onAddChip={handleAddChip} onRemoveChip={handleRemoveChip} onViewRecipe={r => setActiveRecipe(r)} cuisine={resultsCuisine} onCuisineChange={setResultsCuisine} />
             </div>
           </div>
