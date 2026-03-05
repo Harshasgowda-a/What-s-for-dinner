@@ -23,7 +23,7 @@ interface Recipe {
   id: number; title: string; image: string; cuisine: Cuisine;
   readyInMinutes: number; servings: number; difficulty: Difficulty;
   description: string; ingredients: string[]; missingIngredients: string[];
-  steps: Step[]; proTip: string; tags: string[];
+  steps: Step[]; proTip: string; tags: string[]; sourceUrl?: string;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -2064,7 +2064,7 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
 /* ─────────────────────────────────────────────────────────────────────────
    RECIPE CARD
 ───────────────────────────────────────────────────────────────────────── */
-function RecipeCard({ recipe, onClick, delay = 0 }: { recipe: Recipe; onClick: () => void; delay?: number }) {
+function RecipeCard({ recipe, onClick }: { recipe: Recipe; onClick: () => void; delay?: number }) {
   const [hov, setHov] = useState(false);
   const cuisineEntry = CUISINES.find(c => c.label === recipe.cuisine);
   return (
@@ -2654,7 +2654,7 @@ function ResultsPage({ chips, onAddChip, onRemoveChip, onViewRecipe, cuisine, on
         ingredients: r.usedIngredients ?? [],
         missingIngredients: r.missedIngredients ?? [],
         // Map Spoonacular's {number, step} → our {step, title, instruction}
-        steps: (r.steps ?? []).map((s: { number: number; step: string }, idx: number) => ({
+        steps: (r.steps ?? []).map((s: { number: number; step: string }) => ({
           step: s.number,
           title: `Step ${s.number}`,
           instruction: s.step,
