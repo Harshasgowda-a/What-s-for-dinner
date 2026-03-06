@@ -18,12 +18,13 @@ type Cuisine = "All" | "Indian" | "Chinese" | "Italian" | "American" | "Mediterr
 type Difficulty = "Easy" | "Medium" | "Hard";
 type ViewName = "home" | "recipes" | "results";
 
-interface Step { step: number; title: string; instruction: string; tip?: string; }
+interface Step { step: number; title: string; instruction: string; tip?: string; why?: string; }
 interface Recipe {
   id: number; title: string; image: string; cuisine: Cuisine;
   readyInMinutes: number; servings: number; difficulty: Difficulty;
   description: string; ingredients: string[]; missingIngredients: string[];
   steps: Step[]; proTip: string; tags: string[]; sourceUrl?: string;
+  matchPct?: number;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -50,6 +51,19 @@ const INGREDIENT_DB = [
   "ginger","garlic powder","chili powder","mustard seeds","cardamom","cloves","bay leaves","tamarind",
   "kashmiri chili","amchur powder","saffron","chicken broth","vegetable broth","beef broth",
 ].sort();
+
+/* ─────────────────────────────────────────────────────────────────────────
+   VEG / NON-VEG DETECTION
+───────────────────────────────────────────────────────────────────────── */
+const NON_VEG_TOKENS = [
+  "chicken","beef","pork","bacon","ham","lamb","turkey","duck","veal","mutton","goat",
+  "salmon","tuna","shrimp","prawn","crab","lobster","clam","squid","fish","anchovy","mahi",
+  "sausage","pepperoni","chorizo","pancetta","guanciale","lardons","lard",
+];
+function isVegRecipe(r: Recipe): boolean {
+  const haystack = [r.title, ...r.ingredients, ...r.missingIngredients, ...r.tags].join(" ").toLowerCase();
+  return !NON_VEG_TOKENS.some(t => haystack.includes(t));
+}
 
 const FALLBACK = [
   "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=700",
@@ -1774,18 +1788,54 @@ function mapSpoonCuisine(cuisines: string[]): Cuisine {
 /* ─────────────────────────────────────────────────────────────────────────
    HELPER FUNCTIONS
 ───────────────────────────────────────────────────────────────────────── */
-function matchByIngredients(userIng: string[], cuisine: Cuisine): Recipe[] {
+/* ── Smart ingredient matching with weighted scoring ── */
+function tokenize(s: string): string[] {
+  return s.toLowerCase().split(/[\s,()/-]+/).filter(Boolean);
+}
+function ingredientScore(recipeIng: string, userIngs: string[]): number {
+  const ri = recipeIng.toLowerCase().trim();
+  for (const u of userIngs) {
+    const ul = u.toLowerCase().trim();
+    if (ri === ul) return 3;                          // exact match
+    if (ri.includes(ul) || ul.includes(ri)) return 2; // one contains the other
+    // word-level overlap
+    const rWords = tokenize(ri), uWords = tokenize(ul);
+    const overlap = rWords.filter(w => uWords.includes(w) && w.length > 2).length;
+    if (overlap > 0) return 1;
+  }
+  return 0;
+}
+
+function matchByIngredients(userIng: string[], cuisine: Cuisine, vegFilter: "all"|"veg"|"nonveg" = "all"): Recipe[] {
   if (userIng.length === 0) return [];
   const lower = userIng.map(s => s.toLowerCase());
   let pool = cuisine === "All" ? ALL_RECIPES : ALL_RECIPES.filter(r => r.cuisine === cuisine);
+  if (vegFilter === "veg") pool = pool.filter(r => isVegRecipe(r));
+  if (vegFilter === "nonveg") pool = pool.filter(r => !isVegRecipe(r));
+
   const scored = pool.map(recipe => {
-    const score = recipe.ingredients.filter(i => lower.some(u => i.includes(u) || u.includes(i))).length;
-    const used = recipe.ingredients.filter(i => lower.some(u => i.includes(u) || u.includes(i)));
-    const missing = recipe.ingredients.filter(i => !lower.some(u => i.includes(u) || u.includes(i)));
-    return { recipe: { ...recipe, ingredients: used, missingIngredients: missing }, score };
+    let weightedScore = 0;
+    const used: string[] = [];
+    const missing: string[] = [];
+    for (const ing of recipe.ingredients) {
+      const s = ingredientScore(ing, lower);
+      if (s > 0) { used.push(ing); weightedScore += s; }
+      else missing.push(ing);
+    }
+    // bonus for 100% pantry match
+    if (missing.length === 0 && used.length > 0) weightedScore += 5;
+    const totalIngs = recipe.ingredients.length || 1;
+    const matchPct = Math.round((used.length / totalIngs) * 100);
+    return { recipe: { ...recipe, ingredients: used, missingIngredients: missing, matchPct }, weightedScore, matchPct };
   });
-  return scored.filter(x => x.score > 0)
-    .sort((a, b) => b.score - a.score || a.recipe.missingIngredients.length - b.recipe.missingIngredients.length)
+
+  return scored
+    .filter(x => x.matchPct >= 20)  // at least 20% of ingredients match
+    .sort((a, b) =>
+      b.matchPct - a.matchPct ||                           // primary: % match
+      b.weightedScore - a.weightedScore ||                  // secondary: quality
+      a.recipe.missingIngredients.length - b.recipe.missingIngredients.length  // tertiary: fewer missing
+    )
     .map(x => x.recipe);
 }
 
@@ -1832,6 +1882,8 @@ function DiffBadge({ level }: { level: Difficulty }) {
     </span>
   );
 }
+
+
 
 function CuisineBar({ selected, onChange }: { selected: Cuisine; onChange: (c: Cuisine) => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1956,11 +2008,20 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
             <Icon n="close" size={18} />
           </button>
           <div style={{ position: "absolute", bottom: 16, left: 22, right: 60 }}>
-            <div style={{ display: "flex", gap: 7, marginBottom: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 7, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ padding: "3px 10px", borderRadius: 99, background: "rgba(0,0,0,0.45)", color: "#fff", fontSize: 11.5, fontWeight: 600, backdropFilter: "blur(6px)" }}>
                 {cuisineEntry?.emoji} {recipe.cuisine}
               </span>
               <DiffBadge level={recipe.difficulty} />
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px",
+                borderRadius: 99, fontSize: 11, fontWeight: 700, backdropFilter: "blur(6px)",
+                background: isVegRecipe(recipe) ? "rgba(240,253,244,0.9)" : "rgba(255,247,237,0.9)",
+                color: isVegRecipe(recipe) ? "#15803d" : "#c2410c",
+              }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: isVegRecipe(recipe) ? "#22c55e" : "#f97316" }} />
+                {isVegRecipe(recipe) ? "Veg" : "Non-Veg"}
+              </span>
             </div>
             <h2 style={{ color: "#fff", fontSize: 22, fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{recipe.title}</h2>
           </div>
@@ -2028,18 +2089,24 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
                 </div>
               </div>
             ) : recipe.steps.map((s, i) => (
-              <div key={i} style={{ display: "flex", gap: 14, marginBottom: i < recipe.steps.length - 1 ? 22 : 0 }}>
+              <div key={i} style={{ display: "flex", gap: 14, marginBottom: i < recipe.steps.length - 1 ? 24 : 0 }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#33c738", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, flexShrink: 0 }}>{s.step}</div>
-                  {i < recipe.steps.length - 1 && <div style={{ width: 2, flex: 1, background: "#e2e8f0", marginTop: 4, minHeight: 18 }} />}
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #33c738, #16a34a)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, flexShrink: 0, boxShadow: "0 2px 8px rgba(51,199,56,0.35)" }}>{s.step}</div>
+                  {i < recipe.steps.length - 1 && <div style={{ width: 2, flex: 1, background: "linear-gradient(to bottom, #33c738, #e2e8f0)", marginTop: 4, minHeight: 20, borderRadius: 2 }} />}
                 </div>
-                <div style={{ flex: 1, paddingBottom: i < recipe.steps.length - 1 ? 4 : 0 }}>
-                  <h4 style={{ fontSize: 13.5, fontWeight: 700, color: "#0f172a", margin: "4px 0 7px" }}>{s.title}</h4>
-                  <p style={{ fontSize: 13, color: "#374151", lineHeight: 1.8, margin: "0 0 9px" }}>{s.instruction}</p>
+                <div style={{ flex: 1, paddingBottom: i < recipe.steps.length - 1 ? 6 : 0 }}>
+                  <h4 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: "4px 0 8px", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#33c738", background: "#f0fdf4", padding: "1px 7px", borderRadius: 99, border: "1px solid #bbf7d0" }}>STEP {s.step}</span>
+                    {s.title}
+                  </h4>
+                  <p style={{ fontSize: 13.5, color: "#374151", lineHeight: 1.85, margin: "0 0 10px" }}>{s.instruction}</p>
                   {s.tip && (
-                    <div style={{ display: "flex", gap: 8, padding: "9px 14px", background: "#fffbeb", borderRadius: 9, border: "1px solid #fde68a" }}>
-                      <Icon n="tips_and_updates" size={15} color="#d97706" />
-                      <p style={{ fontSize: 12.5, color: "#92400e", margin: 0, lineHeight: 1.65 }}><strong>Chef's Tip:</strong> {s.tip}</p>
+                    <div style={{ display: "flex", gap: 10, padding: "10px 14px", background: "#fffbeb", borderRadius: 10, border: "1px solid #fde68a", marginBottom: 8 }}>
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>💡</span>
+                      <div>
+                        <p style={{ fontSize: 11.5, fontWeight: 800, color: "#b45309", margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Why this matters</p>
+                        <p style={{ fontSize: 12.5, color: "#92400e", margin: 0, lineHeight: 1.7 }}>{s.tip}</p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2067,6 +2134,8 @@ function RecipeModal({ recipe, onClose }: { recipe: Recipe; onClose: () => void 
 function RecipeCard({ recipe, onClick }: { recipe: Recipe; onClick: () => void; delay?: number }) {
   const [hov, setHov] = useState(false);
   const [fav, setFav] = useState(false);
+  const isVeg = isVegRecipe(recipe);
+  const pct = recipe.matchPct;
   return (
     <div onClick={onClick}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
@@ -2083,31 +2152,57 @@ function RecipeCard({ recipe, onClick }: { recipe: Recipe; onClick: () => void; 
       <div style={{ position: "relative", aspectRatio: "4/3", overflow: "hidden", flexShrink: 0 }}>
         <SafeImg src={recipe.image} alt={recipe.title} id={recipe.id}
           style={{ transform: hov ? "scale(1.08)" : "scale(1)", transition: "transform 0.5s ease" }} />
+        {/* Veg / Non-Veg dot top-left */}
+        <div style={{ position: "absolute", top: 8, left: 8 }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px",
+            borderRadius: 99, fontSize: 10, fontWeight: 700, backdropFilter: "blur(8px)",
+            background: isVeg ? "rgba(240,253,244,0.92)" : "rgba(255,247,237,0.92)",
+            color: isVeg ? "#15803d" : "#c2410c",
+            border: isVeg ? "1px solid rgba(187,247,208,0.8)" : "1px solid rgba(254,215,170,0.8)",
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: isVeg ? "#22c55e" : "#f97316", flexShrink: 0 }} />
+            {isVeg ? "Veg" : "Non-Veg"}
+          </span>
+        </div>
+        {/* Match % badge (only when from search) */}
+        {pct !== undefined && (
+          <div style={{ position: "absolute", top: 8, right: 46 }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 7px",
+              borderRadius: 99, fontSize: 10, fontWeight: 800, backdropFilter: "blur(8px)",
+              background: pct === 100 ? "rgba(51,199,56,0.92)" : pct >= 60 ? "rgba(251,191,36,0.92)" : "rgba(255,255,255,0.9)",
+              color: pct === 100 ? "#fff" : pct >= 60 ? "#78350f" : "#475569",
+            }}>
+              {pct}% match
+            </span>
+          </div>
+        )}
         {/* Favourite button */}
         <button onClick={e => { e.stopPropagation(); setFav(f => !f); }}
-          style={{ position: "absolute", top: 10, right: 10, width: 34, height: 34, borderRadius: "50%", background: "rgba(255,255,255,0.92)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.12)", transition: "transform 0.15s", transform: fav ? "scale(1.15)" : "scale(1)" }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18, color: fav ? "#ef4444" : "#94a3b8", fontVariationSettings: fav ? "'FILL' 1" : "'FILL' 0" }}>favorite</span>
+          style={{ position: "absolute", top: 8, right: 8, width: 32, height: 32, borderRadius: "50%", background: "rgba(255,255,255,0.92)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.12)", transition: "transform 0.15s", transform: fav ? "scale(1.15)" : "scale(1)" }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 17, color: fav ? "#ef4444" : "#94a3b8", fontVariationSettings: fav ? "'FILL' 1" : "'FILL' 0" }}>favorite</span>
         </button>
       </div>
       {/* Info */}
-      <div style={{ padding: "14px 14px 14px", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: 0, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>
+      <div style={{ padding: "12px 13px 13px", display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+        <h3 style={{ fontSize: 13.5, fontWeight: 800, color: "#0f172a", margin: 0, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
           {recipe.title}
         </h3>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: "auto" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 8, background: "#f1f5f9", color: "#475569", fontSize: 11.5, fontWeight: 600 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>schedule</span>
-            {recipe.readyInMinutes} mins
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: "auto" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 7, background: "#f1f5f9", color: "#475569", fontSize: 11, fontWeight: 600 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>schedule</span>
+            {recipe.readyInMinutes}m
           </span>
           {recipe.missingIngredients.length === 0 ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 8, background: "rgba(51,199,56,0.12)", color: "#16a34a", fontSize: 11.5, fontWeight: 700 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>check_circle</span>
-              0 missing
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 7, background: "rgba(51,199,56,0.12)", color: "#16a34a", fontSize: 11, fontWeight: 700 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>check_circle</span>
+              Ready to cook!
             </span>
           ) : (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 8, background: "rgba(234,88,12,0.08)", color: "#ea580c", fontSize: 11.5, fontWeight: 700 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>inventory_2</span>
-              {recipe.missingIngredients.length} missing
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 8px", borderRadius: 7, background: "rgba(234,88,12,0.08)", color: "#ea580c", fontSize: 11, fontWeight: 700 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>shopping_cart</span>
+              {recipe.missingIngredients.length} to buy
             </span>
           )}
           <DiffBadge level={recipe.difficulty} />
@@ -2466,13 +2561,25 @@ function HomePage({ onSearch }: { onSearch: (ings: string[]) => void }) {
   const popularRecipes = ALL_RECIPES
     .filter(r => ["Butter Chicken", "Spaghetti Carbonara", "Egg Fried Rice", "Chicken Biryani", "Smash Burger", "Chicken Teriyaki"].includes(r.title));
 
+  const heroRef = useRef<HTMLDivElement>(null);
+  const bgRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    const onScroll = () => {
+      if (!bgRef.current) return;
+      const y = window.scrollY;
+      bgRef.current.style.transform = `scale(1.08) translateY(${y * 0.4}px)`;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
-    <section style={{ position: "relative", minHeight: "calc(100vh - 54px)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-      {/* Background */}
-      <div style={{ position: "absolute", inset: 0 }}>
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.62), rgba(0,0,0,0.35), rgba(0,0,0,0.2))", zIndex: 1 }} />
-        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEofLEVOCfMZb_00lQ2a2Tei_4fbxvo1OqQ2y3vQ3w9gESiyMWHyrGvIStAij4jBqCU1D43qK68glm-B4KuVYUjJOJuxYVsJ9MdTX3Tjr-HjHlcVHi5pgY0CwUTXPunFWpAMl4jo3zviNOK2tXMP3bB_tGKt7x8zW-3z-zkQR7AquRTzxef3OKuWCOGRF--RA9-aF4nabb-zqXb4psPbUnMTfFeDPaKtSW6_H-hNjH12zRjbwBffCRigfj3wD16xb8PufioiDDgYo"
-          alt="Kitchen" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+    <section ref={heroRef} style={{ position: "relative", minHeight: "calc(100vh - 54px)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      {/* Parallax Background */}
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.65), rgba(0,0,0,0.38), rgba(0,0,0,0.22))", zIndex: 1 }} />
+        <img ref={bgRef} src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEofLEVOCfMZb_00lQ2a2Tei_4fbxvo1OqQ2y3vQ3w9gESiyMWHyrGvIStAij4jBqCU1D43qK68glm-B4KuVYUjJOJuxYVsJ9MdTX3Tjr-HjHlcVHi5pgY0CwUTXPunFWpAMl4jo3zviNOK2tXMP3bB_tGKt7x8zW-3z-zkQR7AquRTzxef3OKuWCOGRF--RA9-aF4nabb-zqXb4psPbUnMTfFeDPaKtSW6_H-hNjH12zRjbwBffCRigfj3wD16xb8PufioiDDgYo"
+          alt="Kitchen" style={{ width: "100%", height: "110%", objectFit: "cover", transform: "scale(1.08)", willChange: "transform", transition: "transform 0.05s linear" }} />
       </div>
 
       {/* Content */}
@@ -2554,7 +2661,11 @@ function RecipesPage({ onViewRecipe, cuisine, onCuisineChange }: { onViewRecipe:
   }, []);
 
   const [visibleCount, setVisibleCount] = useState(12);
-  const visibleRecipes = displayed.slice(0, visibleCount);
+  const [vegFilter, setVegFilter] = useState<"all"|"veg"|"nonveg">("all");
+  const filteredDisplayed = vegFilter === "all" ? displayed
+  : vegFilter === "veg" ? displayed.filter((r: Recipe) => isVegRecipe(r))
+  : displayed.filter((r: Recipe) => !isVegRecipe(r));
+const visibleRecipes = filteredDisplayed.slice(0, visibleCount);
 
   return (
     <div className="glass-page" style={{ padding: "32px 32px 40px" }}>
@@ -2600,9 +2711,27 @@ function RecipesPage({ onViewRecipe, cuisine, onCuisineChange }: { onViewRecipe:
 
           <CuisineBar selected={cuisine} onChange={c => { onCuisineChange(c); setQuery(""); setVisibleCount(12); }} />
 
+          {/* Veg / Non-Veg Filter */}
+          <div style={{ display: "flex", gap: 6, marginTop: 12, marginBottom: 4 }}>
+            {(["all","veg","nonveg"] as const).map(v => (
+              <button key={v} onClick={() => setVegFilter(v)}
+                style={{
+                  padding: "5px 14px", borderRadius: 99, border: "none", cursor: "pointer",
+                  fontFamily: "inherit", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
+                  background: vegFilter === v
+                    ? v === "veg" ? "#22c55e" : v === "nonveg" ? "#f97316" : "#33c738"
+                    : "#f1f5f9",
+                  color: vegFilter === v ? "#fff" : "#64748b",
+                  transition: "all 0.18s",
+                }}>
+                {v === "all" ? "🌍 All" : v === "veg" ? "🟢 Veg Only" : "🔴 Non-Veg Only"}
+              </button>
+            ))}
+          </div>
+
           {/* Grid */}
-          <div style={{ marginTop: 24 }}>
-            {displayed.length === 0 ? (
+          <div style={{ marginTop: 20 }}>
+            {filteredDisplayed.length === 0 ? (
               <div style={{ textAlign: "center", padding: "64px 20px", color: "#94a3b8" }}>
                 <Icon n="search_off" size={52} color="#cbd5e1" />
                 <h3 style={{ fontSize: 18, fontWeight: 700, color: "#475569", margin: "14px 0 6px" }}>No recipes found</h3>
@@ -2611,9 +2740,9 @@ function RecipesPage({ onViewRecipe, cuisine, onCuisineChange }: { onViewRecipe:
             ) : (
               <>
                 <div className="recipe-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
-                  {visibleRecipes.map((r, i) => <RecipeCard key={r.id} recipe={r} onClick={() => onViewRecipe(r)} delay={i * 30} />)}
+                {visibleRecipes.map((r: Recipe, i: number) => <RecipeCard key={r.id} recipe={r} onClick={() => onViewRecipe(r)} delay={i * 30} />)}
                 </div>
-                {visibleCount < displayed.length && (
+                {visibleCount < filteredDisplayed.length && (
                   <div style={{ marginTop: 36, display: "flex", justifyContent: "center" }}>
                     <button onClick={() => setVisibleCount(v => v + 12)}
                       style={{ padding: "12px 32px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 14, color: "#374151", fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}
@@ -2698,7 +2827,12 @@ function ResultsPage({ chips, onAddChip, onRemoveChip, onViewRecipe, cuisine, on
     : (filteredLive ?? matchByIngredients(chips, cuisine));
 
   const [visibleCount, setVisibleCount] = useState(12);
-  const visibleRecipes = recipes.slice(0, visibleCount);
+
+  const [vegFilter, setVegFilter] = useState<"all"|"veg"|"nonveg">("all");
+  const filteredDisplayed = vegFilter === "all" ? recipes
+  : vegFilter === "veg" ? recipes.filter(r => isVegRecipe(r))
+  : recipes.filter(r => !isVegRecipe(r));
+const visibleRecipes = filteredDisplayed.slice(0, visibleCount);
 
   return (
     <div className="glass-page" style={{ padding: "32px 32px 40px" }}>
@@ -2706,6 +2840,7 @@ function ResultsPage({ chips, onAddChip, onRemoveChip, onViewRecipe, cuisine, on
           {/* Header row */}
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
             <h1 style={{ fontSize: 26, fontWeight: 900, color: "#0f172a", margin: 0 }}>Search Results</h1>
+            <p style={{ fontSize: 12, color: "#94a3b8", margin: 0, display: "flex", alignItems: "center", gap: 4 }}><span className="material-symbols-outlined" style={{ fontSize: 14 }}>sort</span> Sorted by best ingredient match</p>
             <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
               {loading ? "Searching recipes…" : `Found ${recipes.length} recipes matching your pantry`}
             </p>
@@ -2745,8 +2880,26 @@ function ResultsPage({ chips, onAddChip, onRemoveChip, onViewRecipe, cuisine, on
           {/* Cuisine filter bar */}
           <CuisineBar selected={cuisine} onChange={onCuisineChange} />
 
+          {/* Veg / Non-Veg Filter */}
+          <div style={{ display: "flex", gap: 6, marginTop: 12, marginBottom: 4 }}>
+            {(["all","veg","nonveg"] as const).map(v => (
+              <button key={v} onClick={() => setVegFilter(v)}
+                style={{
+                  padding: "5px 14px", borderRadius: 99, border: "none", cursor: "pointer",
+                  fontFamily: "inherit", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
+                  background: vegFilter === v
+                    ? v === "veg" ? "#22c55e" : v === "nonveg" ? "#f97316" : "#33c738"
+                    : "#f1f5f9",
+                  color: vegFilter === v ? "#fff" : "#64748b",
+                  transition: "all 0.18s",
+                }}>
+                {v === "all" ? "🌍 All" : v === "veg" ? "🟢 Veg Only" : "🔴 Non-Veg Only"}
+              </button>
+            ))}
+          </div>
+
           {/* Recipe grid */}
-          <div style={{ marginTop: 24 }}>
+          <div style={{ marginTop: 20 }}>
             {loading ? (
               <div className="recipe-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 18 }}>
                 {Array.from({ length: 8 }).map((_, i) => (
@@ -2845,6 +2998,9 @@ export default function App() {
     .bg-anim{background:linear-gradient(-45deg,#f6f8f6,#e7f5e7,#f0fdf4,#f6f8f6);background-size:400% 400%;animation:gradShift 15s ease infinite;}
     .cuisine-bar{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
     .cuisine-bar::-webkit-scrollbar{display:none;}
+    .parallax-card { transform: translateZ(0); will-change: transform; }
+    @keyframes slideUp { from { opacity:0; transform:translateY(22px); } to { opacity:1; transform:translateY(0); } }
+    .fade-in { animation: slideUp 0.45s ease both; }
     @media(max-width:640px){
       .nb-links{display:none!important;}
       .nb-name{display:none!important;}
